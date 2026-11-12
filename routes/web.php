@@ -1,38 +1,56 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\CheckoutController;
-use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AuthController;
+use App\Http\Middleware\CheckAuth;
+use App\Http\Middleware\CheckAge;
+use App\Http\Middleware\CheckAdmin;
 
+/*
+|--------------------------------------------------------------------------
+| Fase 3: Rutas Públicas (Acceso Libre)
+|--------------------------------------------------------------------------
+| /, /login y /register son accesibles por cualquier visitante sin restricciones.
+*/
 Route::get('/', function () {
-    return view('welcome');
-});
+    return view('home');
+})->name('home');
 
-Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
-Route::get('/checkout/success/{codigo}', [CheckoutController::class, 'success'])->name('checkout.success');
+Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+Route::post('/login', [AuthController::class, 'login'])->name('login.post');
+Route::post('/login/simulate', [AuthController::class, 'simulate'])->name('login.simulate');
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-Route::get('/admin/login', function () {
-    if (session('admin_logged_in')) {
-        return redirect()->route('admin.index');
-    }
-    return view('admin.login');
-})->name('admin.login');
+Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
+Route::post('/register', [AuthController::class, 'register'])->name('register.post');
 
-Route::post('/admin/login', function (\Illuminate\Http\Request $request) {
-    if ($request->input('password') === env('ADMIN_PASSWORD', 'fiesta123')) {
-        $request->session()->put('admin_logged_in', true);
-        return redirect()->route('admin.index');
-    }
-    return back()->withErrors(['password' => 'Contraseña incorrecta']);
-})->name('admin.login.submit');
+/*
+|--------------------------------------------------------------------------
+| Fase 3: Rutas Privadas (Protegidas por Middlewares / Porteros)
+|--------------------------------------------------------------------------
+*/
 
-Route::middleware([\App\Http\Middleware\AdminAuth::class])->prefix('admin')->group(function () {
-    Route::get('/', [AdminController::class, 'index'])->name('admin.index');
-    Route::post('/logout', function (\Illuminate\Http\Request $request) {
-        $request->session()->forget('admin_logged_in');
-        return redirect()->route('admin.login');
-    })->name('admin.logout');
-    Route::post('/{id}/pay', [AdminController::class, 'markAsPaid'])->name('admin.pay');
-    Route::delete('/{id}/reject', [AdminController::class, 'reject'])->name('admin.reject');
-    Route::get('/download', [AdminController::class, 'downloadCsv'])->name('admin.download');
+// Middleware de Autenticación (CheckAuth):
+// Comprueba si el usuario está autenticado. Si no, redirige a /login.
+Route::middleware(['checkAuth'])->group(function () {
+
+    // /panel: protegida ÚNICAMENTE por el middleware de autenticación
+    Route::get('/panel', function () {
+        return view('panel-usuario');
+    })->name('panel');
+
+    // /casino: protegida por CheckAuth y por CheckAge (edad >= 18)
+    Route::middleware(['checkAge'])->group(function () {
+        Route::get('/casino', function () {
+            return view('casino');
+        })->name('casino');
+    });
+
+    // /admin: protegida por CheckAuth y por CheckAdmin (is_admin = true)
+    Route::middleware(['checkAdmin'])->group(function () {
+        Route::get('/admin', function () {
+            return view('panel-admin');
+        })->name('admin');
+    });
+
 });
